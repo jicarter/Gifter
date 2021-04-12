@@ -1,7 +1,11 @@
-﻿using System;
-using Microsoft.AspNetCore.Mvc;
+﻿using Gifter.Models;
 using Gifter.Repositories;
-using Gifter.Models;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Gifter.Controllers
 {
@@ -21,6 +25,13 @@ namespace Gifter.Controllers
             return Ok(_postRepository.GetAll());
         }
 
+        [HttpGet("GetWithComments")]
+        public IActionResult GetWithComments()
+        {
+            var posts = _postRepository.GetAllWithComments();
+            return Ok(posts);
+        }
+
         [HttpGet("{id}")]
         public IActionResult Get(int id)
         {
@@ -30,6 +41,29 @@ namespace Gifter.Controllers
                 return NotFound();
             }
             return Ok(post);
+        }
+
+        [HttpGet("GetWithComments/{id}")]
+        public IActionResult GetWithComments(int id)
+        {
+            var post = _postRepository.GetPostByIdWithComments(id);
+            if (post == null)
+            {
+                return NotFound();
+            }
+            return Ok(post);
+        }
+
+        [HttpGet("search")]
+        public IActionResult Search(string q, bool sortDesc)
+        {
+            return Ok(_postRepository.Search(q, sortDesc));
+        }
+
+        [HttpGet("hottest")]
+        public IActionResult Hottest(string since)
+        {
+            return Ok(_postRepository.Hottest(since));
         }
 
         [HttpPost]

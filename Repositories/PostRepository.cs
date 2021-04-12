@@ -1,9 +1,11 @@
-﻿using System;
-using System.Linq;
-using System.Collections.Generic;
-using Microsoft.Extensions.Configuration;
-using Gifter.Models;
+﻿using Gifter.Models;
 using Gifter.Utils;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Gifter.Repositories
 {
@@ -21,7 +23,6 @@ namespace Gifter.Repositories
                     cmd.CommandText = @"
                 SELECT p.Id AS PostId, p.Title, p.Caption, p.DateCreated AS PostDateCreated, 
                        p.ImageUrl AS PostImageUrl, p.UserProfileId,
-
                        up.Name, up.Bio, up.Email, up.DateCreated AS UserProfileDateCreated, 
                        up.ImageUrl AS UserProfileImageUrl
                   FROM Post p 
@@ -33,23 +34,7 @@ namespace Gifter.Repositories
                     var posts = new List<Post>();
                     while (reader.Read())
                     {
-                        posts.Add(new Post()
-                        {
-                            Id = DbUtils.GetInt(reader, "PostId"),
-                            Title = DbUtils.GetString(reader, "Title"),
-                            Caption = DbUtils.GetString(reader, "Caption"),
-                            DateCreated = DbUtils.GetDateTime(reader, "PostDateCreated"),
-                            ImageUrl = DbUtils.GetString(reader, "PostImageUrl"),
-                            UserProfileId = DbUtils.GetInt(reader, "UserProfileId"),
-                            UserProfile = new UserProfile()
-                            {
-                                Id = DbUtils.GetInt(reader, "UserProfileId"),
-                                Name = DbUtils.GetString(reader, "Name"),
-                                Email = DbUtils.GetString(reader, "Email"),
-                                DateCreated = DbUtils.GetDateTime(reader, "UserProfileDateCreated"),
-                                ImageUrl = DbUtils.GetString(reader, "UserProfileImageUrl"),
-                            },
-                        });
+                        posts.Add(NewPostFromDb(reader));
                     }
 
                     reader.Close();
@@ -58,6 +43,7 @@ namespace Gifter.Repositories
                 }
             }
         }
+
 
         public List<Post> GetAllWithComments()
         {
@@ -68,11 +54,9 @@ namespace Gifter.Repositories
                 {
                     cmd.CommandText = @"
                 SELECT p.Id AS PostId, p.Title, p.Caption, p.DateCreated AS PostDateCreated,
-                       p.ImageUrl AS PostImageUrl, p.UserProfileId AS PostUserProfileId,
-
+                       p.ImageUrl AS PostImageUrl, p.UserProfileId,
                        up.Name, up.Bio, up.Email, up.DateCreated AS UserProfileDateCreated,
                        up.ImageUrl AS UserProfileImageUrl,
-
                        c.Id AS CommentId, c.Message, c.UserProfileId AS CommentUserProfileId
                   FROM Post p
                        LEFT JOIN UserProfile up ON p.UserProfileId = up.id
@@ -89,25 +73,8 @@ namespace Gifter.Repositories
                         var existingPost = posts.FirstOrDefault(p => p.Id == postId);
                         if (existingPost == null)
                         {
-                            existingPost = new Post()
-                            {
-                                Id = postId,
-                                Title = DbUtils.GetString(reader, "Title"),
-                                Caption = DbUtils.GetString(reader, "Caption"),
-                                DateCreated = DbUtils.GetDateTime(reader, "PostDateCreated"),
-                                ImageUrl = DbUtils.GetString(reader, "PostImageUrl"),
-                                UserProfileId = DbUtils.GetInt(reader, "PostUserProfileId"),
-                                UserProfile = new UserProfile()
-                                {
-                                    Id = DbUtils.GetInt(reader, "PostUserProfileId"),
-                                    Name = DbUtils.GetString(reader, "Name"),
-                                    Email = DbUtils.GetString(reader, "Email"),
-                                    DateCreated = DbUtils.GetDateTime(reader, "UserProfileDateCreated"),
-                                    ImageUrl = DbUtils.GetString(reader, "UserProfileImageUrl"),
-                                },
-                                Comments = new List<Comment>()
-                            };
-
+                            existingPost = NewPostFromDb(reader);
+                            existingPost.Comments = new List<Comment>();
                             posts.Add(existingPost);
                         }
 
@@ -129,6 +96,7 @@ namespace Gifter.Repositories
                 }
             }
         }
+
         public Post GetById(int id)
         {
             using (var conn = Connection)
@@ -137,10 +105,13 @@ namespace Gifter.Repositories
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"
-                          SELECT Title, Caption, p.DateCreated, p.ImageUrl, UserProfileId,up.[Name], up.Email
+                          SELECT p.Id AS PostId, p.Title, p.Caption, p.DateCreated AS PostDateCreated, p.ImageUrl AS PostImageUrl,
+                            p.UserProfileId,
+                            u.Name, u.Email, u.DateCreated as UserProfileDateCreated,
+                            u.ImageUrl as UserProfileImageUrl
                             FROM Post p
-                            LEFT JOIN UserProfile up ON UserProfileId = up.id
-                           WHERE Id = @Id";
+                            LEFT JOIN UserProfile u on p.UserProfileId = u.Id
+                           WHERE p.Id = @Id";
 
                     DbUtils.AddParameter(cmd, "@Id", id);
 
@@ -149,21 +120,7 @@ namespace Gifter.Repositories
                     Post post = null;
                     if (reader.Read())
                     {
-                        post = new Post()
-                        {
-                            Id = id,
-                            Title = DbUtils.GetString(reader, "Title"),
-                            Caption = DbUtils.GetString(reader, "Caption"),
-                            DateCreated = DbUtils.GetDateTime(reader, "DateCreated"),
-                            ImageUrl = DbUtils.GetString(reader, "ImageUrl"),
-                            UserProfileId = DbUtils.GetInt(reader, "UserProfileId"),
-                            UserProfile = new UserProfile()
-                            {
-                                Name = DbUtils.GetString(reader, "Name"),
-                                Email = DbUtils.GetString(reader, "Email"),
-                            },
-                        };
-                        
+                        post = NewPostFromDb(reader);
                     }
 
                     reader.Close();
@@ -173,59 +130,47 @@ namespace Gifter.Repositories
             }
         }
 
-        public Post GetByIdWithComments(int id)
+        public Post GetPostByIdWithComments(int id)
         {
-            var posts = new List<Post>();
             using (var conn = Connection)
             {
                 conn.Open();
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"
-                          SELECT Title, Caption, p.DateCreated, p.ImageUrl, p.UserProfileId,up.[Name], up.Email,
+                          SELECT p.Id AS PostId, p.Title, p.Caption, p.DateCreated AS PostDateCreated, p.ImageUrl AS PostImageUrl, p.UserProfileId,
+                            u.Id as PostUserProfileId, u.Name, u.Email, u.DateCreated as UserProfileDateCreated,
+                            u.ImageUrl as UserProfileImageUrl,
                             c.Id AS CommentId, c.Message, c.UserProfileId AS CommentUserProfileId
                             FROM Post p
-                            LEFT JOIN UserProfile up ON UserProfileId = up.id
-                            LEFT JOIN Comment c on c.PostId = p.id
-                           WHERE Id = @Id
-                            ORDER BY p.DateCreated";
+                            LEFT JOIN UserProfile u on p.UserProfileId = u.Id
+                            LEFT JOIN Comment c on c.PostId = p.Id
+                           WHERE p.Id = @Id";
 
                     DbUtils.AddParameter(cmd, "@Id", id);
 
                     var reader = cmd.ExecuteReader();
 
                     Post post = null;
-                    var postId = DbUtils.GetInt(reader, "PostId");
-
-                    var existingPost = posts.FirstOrDefault(p => p.Id == postId);
-                    if (existingPost == null)
+                    while (reader.Read())
                     {
-                        existingPost = new Post()
+                        if (post == null)
                         {
-                            Id = id,
-                            Title = DbUtils.GetString(reader, "Title"),
-                            Caption = DbUtils.GetString(reader, "Caption"),
-                            DateCreated = DbUtils.GetDateTime(reader, "DateCreated"),
-                            ImageUrl = DbUtils.GetString(reader, "ImageUrl"),
-                            UserProfileId = DbUtils.GetInt(reader, "UserProfileId"),
-                            UserProfile = new UserProfile()
-                            {
-                                Name = DbUtils.GetString(reader, "Name"),
-                                Email = DbUtils.GetString(reader, "Email"),
-                            },
-                            Comments = new List<Comment>()
-                        };
+                            post = NewPostFromDb(reader);
+                            post.Comments = new List<Comment>();
+                        }
                         if (DbUtils.IsNotDbNull(reader, "CommentId"))
                         {
-                            existingPost.Comments.Add(new Comment()
+                            post.Comments.Add(new Comment()
                             {
                                 Id = DbUtils.GetInt(reader, "CommentId"),
                                 Message = DbUtils.GetString(reader, "Message"),
-                                PostId = postId,
+                                PostId = post.Id,
                                 UserProfileId = DbUtils.GetInt(reader, "CommentUserProfileId")
                             });
                         }
                     }
+
 
                     reader.Close();
 
@@ -244,11 +189,10 @@ namespace Gifter.Repositories
                     cmd.CommandText = @"
                         INSERT INTO Post (Title, Caption, DateCreated, ImageUrl, UserProfileId)
                         OUTPUT INSERTED.ID
-                        VALUES (@Title, @Caption, @DateCreated, @ImageUrl, @UserProfileId)";
+                        VALUES (@Title, @Caption, SYSDATETIME(), @ImageUrl, @UserProfileId)";
 
                     DbUtils.AddParameter(cmd, "@Title", post.Title);
                     DbUtils.AddParameter(cmd, "@Caption", post.Caption);
-                    DbUtils.AddParameter(cmd, "@DateCreated", post.DateCreated);
                     DbUtils.AddParameter(cmd, "@ImageUrl", post.ImageUrl);
                     DbUtils.AddParameter(cmd, "@UserProfileId", post.UserProfileId);
 
@@ -293,10 +237,128 @@ namespace Gifter.Repositories
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = "DELETE FROM Post WHERE Id = @Id";
-                    DbUtils.AddParameter(cmd, "@id", id);
+                    DbUtils.AddParameter(cmd, "@Id", id);
                     cmd.ExecuteNonQuery();
                 }
             }
+        }
+
+        public List<Post> Search(string criterion, bool sortDescending)
+        {
+            using (var conn = Connection)
+            {
+                conn.Open();
+                using (var cmd = conn.CreateCommand())
+                {
+                    var sql =
+                        @"SELECT p.Id AS PostId, p.Title, p.Caption, p.DateCreated AS PostDateCreated,
+                            p.ImageUrl AS PostImageUrl, p.UserProfileId,
+                            up.Name, up.Bio, up.Email, up.DateCreated AS UserProfileDateCreated,
+                            up.ImageUrl AS UserProfileImageUrl,
+                            c.Id AS CommentId, c.Message, c.UserProfileId AS CommentUserProfileId
+                        FROM Post p
+                            LEFT JOIN UserProfile up ON p.UserProfileId = up.Id
+                            LEFT JOIN Comment c on c.PostId = p.id
+                        WHERE p.Title LIKE @Criterion OR p.Caption LIKE @Criterion";
+
+                    if (sortDescending)
+                    {
+                        sql += " ORDER BY p.DateCreated DESC";
+                    }
+                    else
+                    {
+                        sql += " ORDER BY p.DateCreated";
+                    }
+
+                    cmd.CommandText = sql;
+
+                    DbUtils.AddParameter(cmd, "@Criterion", $"%{criterion}%");
+                    var reader = cmd.ExecuteReader();
+
+                    var posts = new List<Post>();
+                    while (reader.Read())
+                    {
+                        var postId = DbUtils.GetInt(reader, "PostId");
+
+                        var existingPost = posts.FirstOrDefault(p => p.Id == postId);
+                        if (existingPost == null)
+                        {
+                            existingPost = NewPostFromDb(reader);
+                            existingPost.Comments = new List<Comment>();
+                            posts.Add(existingPost);
+                        }
+
+                        if (DbUtils.IsNotDbNull(reader, "CommentId"))
+                        {
+                            existingPost.Comments.Add(new Comment()
+                            {
+                                Id = DbUtils.GetInt(reader, "CommentId"),
+                                Message = DbUtils.GetString(reader, "Message"),
+                                PostId = postId,
+                                UserProfileId = DbUtils.GetInt(reader, "CommentUserProfileId")
+                            });
+                        }
+                    }
+
+                    reader.Close();
+
+                    return posts;
+                }
+            }
+        }
+        public List<Post> Hottest(string criterion)
+        {
+            using (var conn = Connection)
+            {
+                conn.Open();
+                using (var cmd = conn.CreateCommand())
+                {
+                    var sql =
+                        @"SELECT p.Id AS PostId, p.Title, p.Caption, p.DateCreated AS PostDateCreated,
+                            p.ImageUrl AS PostImageUrl, p.UserProfileId,
+                            up.Name, up.Bio, up.Email, up.DateCreated AS UserProfileDateCreated,
+                            up.ImageUrl AS UserProfileImageUrl
+                        FROM Post p
+                            LEFT JOIN UserProfile up ON p.UserProfileId = up.Id
+                        WHERE p.DateCreated >= @Criterion ";
+
+                    cmd.CommandText = sql;
+
+                    DbUtils.AddParameter(cmd, "@Criterion", criterion);
+                    var reader = cmd.ExecuteReader();
+
+                    var posts = new List<Post>();
+                    while (reader.Read())
+                    {
+                        posts.Add(NewPostFromDb(reader));
+                    }
+
+                    reader.Close();
+
+                    return posts;
+                }
+            }
+        }
+
+        private Post NewPostFromDb(SqlDataReader reader)
+        {
+            return new Post()
+            {
+                Id = DbUtils.GetInt(reader, "PostId"),
+                Title = DbUtils.GetString(reader, "Title"),
+                Caption = DbUtils.GetString(reader, "Caption"),
+                DateCreated = DbUtils.GetDateTime(reader, "PostDateCreated"),
+                ImageUrl = DbUtils.GetString(reader, "PostImageUrl"),
+                UserProfileId = DbUtils.GetInt(reader, "UserProfileId"),
+                UserProfile = new UserProfile()
+                {
+                    Id = DbUtils.GetInt(reader, "UserProfileId"),
+                    Name = DbUtils.GetString(reader, "Name"),
+                    Email = DbUtils.GetString(reader, "Email"),
+                    DateCreated = DbUtils.GetDateTime(reader, "UserProfileDateCreated"),
+                    ImageUrl = DbUtils.GetString(reader, "UserProfileImageUrl"),
+                },
+            };
         }
     }
 }
