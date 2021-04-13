@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { useHistory } from 'react-router-dom';
-import { PostContext } from '../providers/PostProvider';
+import { PostContext } from '../Providers/PostProvider';
 import { Button, Form, FormGroup, Label, Input } from 'reactstrap';
 
 export const PostForm = () => {
@@ -70,3 +70,5 @@ export const PostForm = () => {
         </Form>
     );
 };
+
+export default PostForm;

@@ -46,3 +46,6 @@ C:\Users\jorda\workspace\Gifter\Gifter\obj\Debug\net5.0\Gifter.dll
 C:\Users\jorda\workspace\Gifter\Gifter\obj\Debug\net5.0\ref\Gifter.dll
 C:\Users\jorda\workspace\Gifter\Gifter\obj\Debug\net5.0\Gifter.pdb
 C:\Users\jorda\workspace\Gifter\Gifter\obj\Debug\net5.0\Gifter.genruntimeconfig.cache
+C:\Users\jorda\workspace\Gifter\Gifter\bin\Debug\net5.0\Client\gifter\package-lock.json
+C:\Users\jorda\workspace\Gifter\Gifter\bin\Debug\net5.0\Client\gifter\package.json
+C:\Users\jorda\workspace\Gifter\Gifter\bin\Debug\net5.0\Client\gifter\public\manifest.json

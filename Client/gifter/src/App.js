@@ -1,22 +1,21 @@
-import React from 'react';
-import './App.css';
-import { PostProvider } from './Providers/PostProvider';
-import { PostList } from './Components/PostList';
-import { SearchProvider } from './Providers/SearchProvider';
-import { SearchForm } from './Components/SearchPost';
-
+import React from "react";
+import { BrowserRouter as Router } from "react-router-dom";
+import "./App.css";
+import ApplicationViews from "./Components/ApplicationView";
+import { SearchForm } from "./Components/SearchPost";
+import { PostProvider } from "./Providers/PostProvider";
+import { Header } from "./Components/Header";
 
 function App() {
     return (
         <div className="App">
-            <SearchProvider>
+            <Router>
                 <PostProvider>
-                    <div className="row align-items-center">
-                        <SearchForm />
-                    </div>
-                    <PostList />
+                    <Header />
+                    <ApplicationViews />
+                    <SearchForm />
                 </PostProvider>
-            </SearchProvider>
+            </Router>
         </div>
     );
 }

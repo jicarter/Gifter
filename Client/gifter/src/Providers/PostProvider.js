@@ -21,8 +21,15 @@ export const PostProvider = (props) => {
     });
   };
 
+  const getPost = (id) => {
+    return fetch(`/api/post/${id}`).then((res) => res.json());
+};
+  const getPostByUserId = (userId) => {
+    return fetch(`/api/post/${userId}`).then((res) => res.json());
+};
+
   return (
-    <PostContext.Provider value={{ posts, getAllPosts, addPost }}>
+    <PostContext.Provider value={{ posts, getAllPosts, addPost, getPost, getPostByUserId }}>
       {props.children}
     </PostContext.Provider>
   );
